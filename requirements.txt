@@ -1,0 +1,36 @@
+# =============================================================================
+# Runbook Guardian - Dependencias Python
+# =============================================================================
+
+# Backend API
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.3
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+
+# RAG / Embeddings
+sentence-transformers==3.3.1
+chromadb==0.5.23
+tiktoken==0.8.0
+
+# Procesamiento de Runbooks
+python-frontmatter==1.1.0
+markdown==3.7
+
+# Frontend
+streamlit==1.41.1
+requests==2.32.3
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+httpx==0.28.1
+
+# Linting / Formato
+ruff==0.8.4
+
+# Utilidades
+pyyaml==6.0.2
+structlog==24.4.0
