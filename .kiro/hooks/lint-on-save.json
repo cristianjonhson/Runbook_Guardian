@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Lint Python on Save",
+      "trigger": "PostFileSave",
+      "description": "Runs ruff linter on Python files after save to catch style and import issues immediately",
+      "matcher": "\\.(py)$",
+      "action": {
+        "type": "command",
+        "command": "ruff check --fix \"$KIRO_FILE_PATH\"",
+        "timeout": 10
+      }
+    }
+  ]
+}
