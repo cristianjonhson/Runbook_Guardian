@@ -1,7 +1,5 @@
 """Tests unitarios para SafetyService."""
 
-import pytest
-
 from backend.services.safety_service import SafetyService
 
 
