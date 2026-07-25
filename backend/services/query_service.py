@@ -14,7 +14,6 @@ import structlog
 from backend.api.schemas import (
     EvidenceFragment,
     QueryResponse,
-    RejectedSource,
     ResponseMetadata,
 )
 from backend.services.retrieval_service import RetrievalService
