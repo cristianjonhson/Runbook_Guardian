@@ -1,9 +1,6 @@
 """Tests unitarios para RetrievalService (con mock de VectorRepository)."""
 
-from datetime import date
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from backend.services.retrieval_service import RetrievalService
 
