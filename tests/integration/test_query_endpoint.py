@@ -1,7 +1,6 @@
 """Tests de integración para el endpoint de consulta."""
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 
 from backend.main import app
 
