@@ -14,6 +14,7 @@ ignore = ["S101", "COM812", "B008", "S104"]  # Allow: assert in tests, optional 
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E402"]  # Scripts need sys.path manipulation before imports
+"backend/api/schemas.py" = ["I001"]  # Section comments between imports
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend", "frontend"]
