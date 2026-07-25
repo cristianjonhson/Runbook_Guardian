@@ -1,7 +1,7 @@
 """Router principal de la API v1."""
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from backend.api.dependencies import (
     get_fallback_service,
