@@ -48,7 +48,7 @@ def main():
     start_time = time.time()
 
     # Inicializar componentes
-    print(f"[1/4] Inicializando repositorios...")
+    print("[1/4] Inicializando repositorios...")
     print(f"       Runbooks: {args.runbooks_path}")
     print(f"       ChromaDB: {settings.chroma_persist_dir}")
     print(f"       Modelo: {settings.embedding_model}")
@@ -66,7 +66,7 @@ def main():
         print("    Índice limpio.")
 
     # Cargar runbooks
-    print(f"\n[2/4] Cargando runbooks...")
+    print("\n[2/4] Cargando runbooks...")
     runbooks = runbook_repo.list_all()
     print(f"       {len(runbooks)} runbooks encontrados")
 
@@ -76,7 +76,7 @@ def main():
         sys.exit(1)
 
     # Generar embeddings e indexar
-    print(f"\n[3/4] Generando embeddings e indexando...")
+    print("\n[3/4] Generando embeddings e indexando...")
     retrieval_service = RetrievalService(
         vector_repository=vector_repo,
         model_name=settings.embedding_model,
@@ -131,7 +131,7 @@ def main():
 
     # Resumen
     elapsed = time.time() - start_time
-    print(f"\n[4/4] Ingesta completada")
+    print("\n[4/4] Ingesta completada")
     print(f"       {'─' * 40}")
     print(f"       Runbooks procesados:  {len(runbooks)}")
     print(f"       Secciones indexadas:  {total_sections}")
