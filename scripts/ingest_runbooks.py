@@ -95,7 +95,10 @@ def main():
             if not section.content.strip():
                 continue
 
-            doc_id = f"{runbook.metadata.file_path.replace('.md', '')}__{section.heading.lower().replace(' ', '_')}"
+            doc_id = (
+                f"{runbook.metadata.file_path.replace('.md', '')}"
+                f"__{section.heading.lower().replace(' ', '_')}"
+            )
 
             metadata = {
                 "title": runbook.metadata.title,
