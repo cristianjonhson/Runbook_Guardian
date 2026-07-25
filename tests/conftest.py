@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from backend.models.query import RetrievalCandidate
-from backend.models.runbook import Runbook, RunbookMetadata, RunbookSection
+from backend.models.runbook import RunbookMetadata
 
 
 @pytest.fixture
