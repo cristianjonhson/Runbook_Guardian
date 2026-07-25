@@ -12,7 +12,6 @@ Uso:
     python scripts/demo_queries.py
 """
 
-import json
 import sys
 import time
 
@@ -56,7 +55,7 @@ def check_backend():
         return data["runbooks_indexed"] > 0
     except requests.exceptions.ConnectionError:
         print("  ERROR: Backend no disponible")
-        print(f"  Ejecuta: uvicorn backend.main:app --port 8000")
+        print("  Ejecuta: uvicorn backend.main:app --port 8000")
         return False
 
 
@@ -74,13 +73,13 @@ def demo_1_successful_query():
 
     if result["results"]:
         top = result["results"][0]
-        print(f"\n  TOP RESULTADO:")
+        print("\n  TOP RESULTADO:")
         print(f"  Fuente: {top['source_file']}")
         print(f"  Versión: {top['version']}")
         print(f"  Sección: {top['section']}")
         print(f"  Score: {top['similarity_score']:.3f}")
         print(f"  Revisado: {top['last_reviewed']}")
-        print(f"\n  Fragmento:")
+        print("\n  Fragmento:")
         for line in top["text"].split("\n")[:5]:
             print(f"    {line}")
         if len(top["text"].split("\n")) > 5:
@@ -101,7 +100,7 @@ def demo_2_deprecated_rejection():
     print(f"  Fuentes rechazadas: {len(result['rejected_sources'])}")
 
     if result["rejected_sources"]:
-        print(f"\n  FUENTES RECHAZADAS:")
+        print("\n  FUENTES RECHAZADAS:")
         for rej in result["rejected_sources"][:3]:
             print(f"    - {rej['source_file']}: {rej['reason']}")
 
@@ -128,7 +127,7 @@ def demo_3_destructive_warning():
                 print(f"    ⚠️  {w}")
 
     if result["warnings"]:
-        print(f"\n  WARNINGS GLOBALES:")
+        print("\n  WARNINGS GLOBALES:")
         for w in result["warnings"]:
             print(f"    ⚠️  {w}")
 
