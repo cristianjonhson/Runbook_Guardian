@@ -43,6 +43,9 @@ chroma_data/
 *.log
 logs/
 
+# Manifests generados (artefactos, no código fuente)
+data/manifests/
+
 # Distribution
 *.tar.gz
 *.whl
