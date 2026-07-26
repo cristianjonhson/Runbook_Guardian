@@ -40,12 +40,49 @@ def get_vector_repository():
 
 @lru_cache(maxsize=1)
 def get_retrieval_service():
-    """Crea y cachea el RetrievalService."""
+    """Crea y cachea el RetrievalService (ChromaDB local)."""
     from backend.services.retrieval_service import RetrievalService
 
     return RetrievalService(
         vector_repository=get_vector_repository(),
         model_name=settings.embedding_model,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_local_retriever():
+    """Crea y cachea el LocalRunbookRetriever."""
+    from backend.services.local_retriever import LocalRunbookRetriever
+
+    return LocalRunbookRetriever(retrieval_service=get_retrieval_service())
+
+
+@lru_cache(maxsize=1)
+def get_bedrock_retriever():
+    """Crea el BedrockRunbookRetriever (None si RAG_PROVIDER=local)."""
+    if settings.rag_provider == "local":
+        return None
+
+    from backend.services.bedrock_retriever import BedrockRunbookRetriever
+
+    return BedrockRunbookRetriever(
+        model_id=settings.bedrock_model_id,
+        region=settings.aws_region,
+        max_tokens=settings.bedrock_max_tokens,
+        temperature=settings.bedrock_temperature,
+        timeout_seconds=settings.bedrock_timeout_seconds,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_fallback_router():
+    """Crea y cachea el FallbackRouter según RAG_PROVIDER."""
+    from backend.services.fallback_router import FallbackRouter
+
+    return FallbackRouter(
+        local_retriever=get_local_retriever(),
+        bedrock_retriever=get_bedrock_retriever(),
+        provider=settings.rag_provider,
     )
 
 
@@ -67,11 +104,11 @@ def get_safety_service():
 
 @lru_cache(maxsize=1)
 def get_query_service():
-    """Crea y cachea el QueryService (orquestador)."""
+    """Crea y cachea el QueryService (orquestador con FallbackRouter)."""
     from backend.services.query_service import QueryService
 
     return QueryService(
-        retrieval_service=get_retrieval_service(),
+        fallback_router=get_fallback_router(),
         validation_service=get_validation_service(),
         safety_service=get_safety_service(),
     )
@@ -79,7 +116,7 @@ def get_query_service():
 
 @lru_cache(maxsize=1)
 def get_fallback_service():
-    """Crea y cachea el FallbackService."""
+    """Crea y cachea el FallbackService (respuestas precomputadas)."""
     from backend.services.fallback_service import FallbackService
 
     fallback_file = Path("data/fallback_responses.json")
