@@ -1,0 +1,205 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Runbook Guardian - Stack de fundación AWS.
+  Crea el bucket S3 versionado para runbooks y el rol IAM para invocar Bedrock.
+
+# ==============================================================================
+# Parámetros
+# ==============================================================================
+Parameters:
+  ProjectName:
+    Type: String
+    Default: runbook-guardian
+    Description: Nombre del proyecto (usado en naming de recursos).
+    AllowedPattern: "^[a-z0-9-]+$"
+
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - demo
+    Description: Entorno de despliegue.
+
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Description: ID del modelo de generación en Bedrock.
+
+  BedrockEmbeddingModelId:
+    Type: String
+    Default: amazon.titan-embed-text-v2:0
+    Description: ID del modelo de embeddings en Bedrock.
+
+  LogRetentionDays:
+    Type: Number
+    Default: 7
+    AllowedValues:
+      - 1
+      - 3
+      - 7
+      - 14
+      - 30
+    Description: Días de retención de logs en CloudWatch.
+
+# ==============================================================================
+# Recursos
+# ==============================================================================
+Resources:
+  # --------------------------------------------------------------------------
+  # S3 Bucket — Almacenamiento versionado de runbooks
+  # --------------------------------------------------------------------------
+  RunbookSourceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${ProjectName}-source-${AWS::AccountId}-${Environment}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteNonCurrentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+        - Key: CostCenter
+          Value: hackathon
+
+  # --------------------------------------------------------------------------
+  # S3 Bucket Policy — HTTPS obligatorio, sin acceso público
+  # --------------------------------------------------------------------------
+  RunbookSourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref RunbookSourceBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt RunbookSourceBucket.Arn
+              - !Sub "${RunbookSourceBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+
+  # --------------------------------------------------------------------------
+  # IAM Role — Bedrock Invocation (para Lambda futura o ejecución local)
+  # --------------------------------------------------------------------------
+  BedrockInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-bedrock-invoke-${Environment}"
+      Description: >
+        Rol para invocar Amazon Bedrock (InvokeModel) y leer runbooks de S3.
+        Principio de mínimo privilegio.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+          # Permitir asumir el rol desde credenciales locales para desarrollo
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockInvokePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Invocar modelos de Bedrock (generación + embeddings)
+              - Sid: AllowBedrockInvoke
+                Effect: Allow
+                Action:
+                  - "bedrock:InvokeModel"
+                  - "bedrock:InvokeModelWithResponseStream"
+                Resource:
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockEmbeddingModelId}"
+              # Leer runbooks del bucket S3
+              - Sid: AllowS3ReadRunbooks
+                Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:ListBucket"
+                Resource:
+                  - !GetAtt RunbookSourceBucket.Arn
+                  - !Sub "${RunbookSourceBucket.Arn}/*"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: cloudformation
+
+  # --------------------------------------------------------------------------
+  # CloudWatch Log Group — Logs de la aplicación
+  # --------------------------------------------------------------------------
+  ApplicationLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    Properties:
+      LogGroupName: !Sub "/aws/${ProjectName}/${Environment}"
+      RetentionInDays: !Ref LogRetentionDays
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+# ==============================================================================
+# Outputs
+# ==============================================================================
+Outputs:
+  S3BucketName:
+    Description: Nombre del bucket S3 de runbooks.
+    Value: !Ref RunbookSourceBucket
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-s3-bucket-name"
+
+  S3BucketArn:
+    Description: ARN del bucket S3 de runbooks.
+    Value: !GetAtt RunbookSourceBucket.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-s3-bucket-arn"
+
+  BedrockInvokeRoleArn:
+    Description: ARN del rol IAM para invocar Bedrock.
+    Value: !GetAtt BedrockInvokeRole.Arn
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-bedrock-role-arn"
+
+  LogGroupName:
+    Description: Nombre del Log Group de CloudWatch.
+    Value: !Ref ApplicationLogGroup
+
+  StackRegion:
+    Description: Región donde se desplegó el stack.
+    Value: !Ref "AWS::Region"
