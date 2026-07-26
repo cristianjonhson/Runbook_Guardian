@@ -42,6 +42,18 @@ class Settings(BaseSettings):
         r"kubectl\s+delete|terraform\s+destroy|aws\s+.*--force"
     )
 
+    # --- RAG Provider ---
+    rag_provider: str = "local"  # local | bedrock | auto
+
+    # --- AWS / Bedrock ---
+    aws_region: str = "us-east-1"
+    bedrock_model_id: str = "anthropic.claude-3-haiku-20240307-v1:0"
+    bedrock_embedding_model_id: str = "amazon.titan-embed-text-v2:0"
+    bedrock_max_tokens: int = 500
+    bedrock_temperature: float = 0.1
+    bedrock_timeout_seconds: int = 10
+    s3_runbooks_bucket: str = ""
+
     # --- Logging ---
     log_level: str = "INFO"
     log_format: str = "json"
