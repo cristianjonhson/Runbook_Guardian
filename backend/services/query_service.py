@@ -1,13 +1,14 @@
 """Servicio de consulta — orquestador principal.
 
 Coordina el flujo completo:
-  1. Retrieval: buscar fragmentos similares en vector store.
+  1. Retrieval via FallbackRouter (local, bedrock, o auto).
   2. Validación: filtrar por vigencia (deprecated, stale).
   3. Seguridad: marcar acciones destructivas.
-  4. Respuesta: construir QueryResponse con evidencia.
+  4. Respuesta: construir QueryResponse con evidencia y metadata de proveedor.
 """
 
 import time
+import uuid
 
 import structlog
 
@@ -16,7 +17,8 @@ from backend.api.schemas import (
     QueryResponse,
     ResponseMetadata,
 )
-from backend.services.retrieval_service import RetrievalService
+from backend.services.fallback_router import FallbackRouter
+from backend.services.retriever_protocol import RetrievalResult
 from backend.services.safety_service import SafetyService
 from backend.services.validation_service import ValidationService
 
@@ -28,43 +30,53 @@ class QueryService:
 
     def __init__(
         self,
-        retrieval_service: RetrievalService,
+        fallback_router: FallbackRouter,
         validation_service: ValidationService,
         safety_service: SafetyService,
     ):
         """Inicializa el orquestador con sus dependencias.
 
         Args:
-            retrieval_service: Servicio de búsqueda semántica.
+            fallback_router: Router que gestiona local/bedrock/auto.
             validation_service: Servicio de validación de vigencia.
             safety_service: Servicio de detección de acciones destructivas.
         """
-        self._retrieval = retrieval_service
+        self._router = fallback_router
         self._validation = validation_service
         self._safety = safety_service
 
     def process_query(self, query: str, top_k: int = 5) -> QueryResponse:
         """Procesa una consulta completa a través del pipeline.
 
-        Flujo: retrieval → validación → seguridad → respuesta.
+        Flujo: retrieval (via router) → validación → seguridad → respuesta.
 
         Args:
             query: Texto de consulta del usuario.
             top_k: Número máximo de candidatos a recuperar.
 
         Returns:
-            QueryResponse con resultados, warnings y metadata.
+            QueryResponse con resultados, warnings y metadata de proveedor.
         """
         start_time = time.time()
+        correlation_id = str(uuid.uuid4())[:8]
 
-        # 1. Retrieval: buscar fragmentos similares
-        candidates = self._retrieval.search(query=query, top_k=top_k)
+        # 1. Retrieval via FallbackRouter
+        retrieval_result: RetrievalResult = self._router.retrieve(
+            query=query, top_k=top_k
+        )
+
+        candidates = retrieval_result.candidates
         total_candidates = len(candidates)
 
         logger.info(
             "query_retrieval_complete",
+            correlation_id=correlation_id,
             query_length=len(query),
             candidates_found=total_candidates,
+            provider_requested=self._router.provider_name,
+            provider_used=retrieval_result.provider,
+            fallback_applied=retrieval_result.fallback_applied,
+            fallback_reason=retrieval_result.fallback_reason,
         )
 
         # 2. Validación: filtrar por vigencia
@@ -90,7 +102,6 @@ class QueryService:
             )
             results.append(fragment)
 
-            # Agregar warnings globales si hay acciones destructivas
             if safety_result.has_warnings:
                 global_warnings.append(
                     f"El resultado de '{candidate.metadata.file_path}' contiene "
@@ -100,6 +111,13 @@ class QueryService:
         # Calcular tiempo de respuesta
         elapsed_ms = int((time.time() - start_time) * 1000)
 
+        # Determinar modo
+        mode = "normal"
+        if retrieval_result.fallback_applied:
+            mode = "fallback"
+        elif retrieval_result.error:
+            mode = "error"
+
         response = QueryResponse(
             query=query,
             results=results,
@@ -108,16 +126,19 @@ class QueryService:
             metadata=ResponseMetadata(
                 response_time_ms=elapsed_ms,
                 total_candidates=total_candidates,
-                mode="normal",
+                mode=mode,
             ),
         )
 
         logger.info(
             "query_processed",
+            correlation_id=correlation_id,
             results_count=len(results),
             rejected_count=len(validation_result.rejected),
             warnings_count=len(global_warnings),
             response_time_ms=elapsed_ms,
+            provider_used=retrieval_result.provider,
+            mode=mode,
         )
 
         return response
