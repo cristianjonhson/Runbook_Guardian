@@ -68,7 +68,7 @@ if submit and query:
             response = requests.post(
                 API_QUERY_URL,
                 json={"query": query},
-                timeout=30,
+                timeout=60,
             )
             response.raise_for_status()
             data = response.json()
