@@ -1,91 +1,91 @@
 ---
-title: "Disk Full - Emergency Cleanup Procedures"
+title: "Disco Lleno - Procedimientos de Limpieza de Emergencia"
 service: "linux-infrastructure"
 version: "2.1.0"
 last_reviewed: "2026-07-05"
 status: "active"
 ---
 
-## Symptoms
+## Síntomas
 
-- Disk usage at 90% or above on any mounted partition.
-- Applications failing to write logs or temp files.
-- Database refusing writes due to insufficient disk space.
-- Alert: "Disk space critically low on /dev/sda1".
+- Uso de disco al 90% o superior en cualquier partición montada.
+- Aplicaciones fallando al escribir logs o archivos temporales.
+- Base de datos rechazando escrituras por espacio insuficiente.
+- Alerta: "Espacio en disco críticamente bajo en /dev/sda1".
 
-## Diagnosis
+## Diagnóstico
 
-1. Check disk usage across all partitions:
+1. Verificar uso de disco en todas las particiones:
    ```
    df -h
    ```
 
-2. Identify largest directories consuming space:
+2. Identificar los directorios más grandes consumiendo espacio:
    ```
    du -sh /* 2>/dev/null | sort -rh | head -10
    ```
 
-3. Find largest files modified in the last 7 days:
+3. Encontrar archivos grandes modificados en los últimos 7 días:
    ```
    find / -type f -mtime -7 -size +100M -exec ls -lh {} \; 2>/dev/null
    ```
 
-4. Check for deleted files still held open by processes:
+4. Verificar archivos eliminados aún abiertos por procesos:
    ```
    lsof +L1
    ```
 
-5. Check log rotation status:
+5. Revisar estado de rotación de logs:
    ```
    ls -lh /var/log/*.log
    journalctl --disk-usage
    ```
 
-## Resolution
+## Resolución
 
-1. Clean package manager cache (safe, recoverable):
+1. Limpiar caché del gestor de paquetes (seguro, recuperable):
    ```
    apt-get clean
    yum clean all
    ```
 
-2. Remove old journal logs (keep last 3 days):
+2. Eliminar journal logs antiguos (mantener últimos 3 días):
    ```
    journalctl --vacuum-time=3d
    ```
 
-3. Compress large log files:
+3. Comprimir archivos de log grandes:
    ```
    find /var/log -name "*.log" -size +100M -exec gzip {} \;
    ```
 
-4. Remove temporary files older than 7 days:
+4. Eliminar archivos temporales con más de 7 días:
    ```
    find /tmp -type f -atime +7 -delete
    ```
 
-5. If deleted files are held by processes, restart those services:
+5. Si hay archivos eliminados retenidos por procesos, reiniciar esos servicios:
    ```
-   systemctl restart <service-holding-deleted-files>
+   systemctl restart <servicio-con-archivos-eliminados>
    ```
 
-6. WARNING: Do NOT run `rm -rf /` or delete system directories.
-   Only remove files you can identify and verify are safe to delete.
+6. ADVERTENCIA: NO ejecutar `rm -rf /` ni eliminar directorios del sistema.
+   Solo eliminar archivos que pueda identificar y verificar que son seguros.
 
-7. After cleanup, verify available space:
+7. Después de la limpieza, verificar espacio disponible:
    ```
    df -h
    ```
 
-## Escalation
+## Escalamiento
 
-- If disk is full and no safe files can be removed, escalate to infrastructure team for volume expansion.
-- If database disk is full, engage the DBA team immediately.
-- Consider adding additional EBS volumes if on AWS.
+- Si el disco está lleno y no hay archivos seguros para eliminar, escalar al equipo de infraestructura para expansión de volumen.
+- Si el disco de base de datos está lleno, contactar al equipo DBA inmediatamente.
+- Considerar agregar volúmenes EBS adicionales si está en AWS.
 
-## Prevention
+## Prevención
 
-- Set disk usage alerts at 80% threshold.
-- Implement log rotation with size limits (logrotate).
-- Schedule weekly cleanup cron jobs for /tmp and old logs.
-- Monitor disk growth trends for capacity planning.
+- Configurar alertas de uso de disco al umbral del 80%.
+- Implementar rotación de logs con límites de tamaño (logrotate).
+- Programar tareas cron semanales de limpieza para /tmp y logs antiguos.
+- Monitorear tendencias de crecimiento de disco para planificación de capacidad.

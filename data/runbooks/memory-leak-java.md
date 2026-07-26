@@ -1,86 +1,86 @@
 ---
-title: "Java Application Memory Leak Investigation"
+title: "Investigación de Memory Leak en Aplicación Java"
 service: "java-applications"
 version: "1.1.0"
 last_reviewed: "2025-01-15"
 status: "deprecated"
 ---
 
-## Symptoms
+## Síntomas
 
-- Java heap usage steadily increasing over time without release.
-- OutOfMemoryError in application logs.
-- Garbage collection pauses becoming longer and more frequent.
-- Application response time degradation over days.
-- Container/pod being OOM-killed by orchestrator.
+- Uso de heap Java incrementando constantemente sin liberarse.
+- OutOfMemoryError en logs de la aplicación.
+- Pausas de garbage collection cada vez más largas y frecuentes.
+- Degradación del tiempo de respuesta de la aplicación a lo largo de días.
+- Contenedor/pod siendo OOM-killed por el orquestador.
 
-## Diagnosis
+## Diagnóstico
 
-1. Check current JVM memory usage:
+1. Verificar uso actual de memoria JVM:
    ```
    jstat -gcutil <PID> 1000 5
    ```
 
-2. Review GC logs for Full GC frequency:
+2. Revisar logs de GC para frecuencia de Full GC:
    ```
    grep "Full GC" /var/log/app/gc.log | tail -20
    ```
 
-3. Capture heap dump for analysis:
+3. Capturar heap dump para análisis:
    ```
    jmap -dump:live,format=b,file=/tmp/heapdump.hprof <PID>
    ```
 
-4. Check heap histogram for object count:
+4. Verificar histograma de heap para conteo de objetos:
    ```
    jmap -histo:live <PID> | head -30
    ```
 
-5. Monitor memory trend over time:
+5. Monitorear tendencia de memoria en el tiempo:
    ```
    while true; do jstat -gcutil <PID> | tail -1; sleep 60; done
    ```
 
-## Resolution
+## Resolución
 
-1. If the application is unresponsive, restart it immediately:
+1. Si la aplicación no responde, reiniciarla inmediatamente:
    ```
-   systemctl restart <java-service>
+   systemctl restart <servicio-java>
    ```
 
-2. Increase heap size as temporary mitigation:
+2. Incrementar tamaño de heap como mitigación temporal:
    ```
-   # In service configuration, adjust -Xmx:
+   # En la configuración del servicio, ajustar -Xmx:
    JAVA_OPTS="-Xmx4g -Xms2g"
-   systemctl restart <java-service>
+   systemctl restart <servicio-java>
    ```
 
-3. Analyze the heap dump with a profiler:
-   - Open `/tmp/heapdump.hprof` in Eclipse MAT or VisualVM.
-   - Look for: retained heap size, dominator tree, leak suspects.
+3. Analizar el heap dump con un profiler:
+   - Abrir `/tmp/heapdump.hprof` en Eclipse MAT o VisualVM.
+   - Buscar: retained heap size, dominator tree, leak suspects.
 
-4. Common leak patterns to check:
-   - Unbounded caches without eviction.
-   - Event listeners not being unregistered.
-   - ThreadLocal variables not cleaned up.
-   - Large collections growing without bounds.
+4. Patrones comunes de leak a verificar:
+   - Cachés sin límite ni eviction.
+   - Event listeners que no se desregistran.
+   - Variables ThreadLocal que no se limpian.
+   - Colecciones grandes creciendo sin control.
 
-5. After identifying the leak, deploy a fix and monitor:
+5. Después de identificar el leak, desplegar el fix y monitorear:
    ```
-   # Verify heap stabilizes after fix
+   # Verificar que el heap se estabiliza después del fix
    jstat -gcutil <PID> 5000 60
    ```
 
-## Escalation
+## Escalamiento
 
-- If the leak is in application code, engage the development team with the heap dump analysis.
-- If the leak is in a third-party library, check for known issues and patches.
-- If immediate restart does not help, consider rolling back to the last known good version.
+- Si el leak está en código de la aplicación, contactar al equipo de desarrollo con el análisis del heap dump.
+- Si el leak está en una librería de terceros, verificar issues conocidos y parches.
+- Si el restart inmediato no ayuda, considerar rollback a la última versión estable.
 
-## Prevention
+## Prevención
 
-- Set up memory usage alerts at 80% of max heap.
-- Enable GC logging in all Java services.
-- Run periodic memory profiling in staging.
-- Implement circuit breakers to prevent cascading failures.
-- Review memory usage trends in weekly operational reviews.
+- Configurar alertas de uso de memoria al 80% del max heap.
+- Habilitar logging de GC en todos los servicios Java.
+- Ejecutar profiling periódico de memoria en staging.
+- Implementar circuit breakers para prevenir fallos en cascada.
+- Revisar tendencias de uso de memoria en revisiones operacionales semanales.

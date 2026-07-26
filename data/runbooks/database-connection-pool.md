@@ -1,39 +1,39 @@
 ---
-title: "Database Connection Pool Exhaustion"
+title: "Agotamiento del Pool de Conexiones de Base de Datos"
 service: "postgresql"
 version: "1.0.0"
 last_reviewed: "2026-06-20"
 status: "active"
 ---
 
-## Symptoms
+## Síntomas
 
-- Application logs show "connection pool exhausted" or "too many connections".
-- Database queries timing out.
-- New connections being refused by PostgreSQL.
-- Increased latency in API responses.
+- Logs de aplicación muestran "connection pool exhausted" o "too many connections".
+- Consultas a la base de datos agotando timeout.
+- PostgreSQL rechazando nuevas conexiones.
+- Latencia incrementada en respuestas de la API.
 - Error: "FATAL: too many connections for role".
 
-## Diagnosis
+## Diagnóstico
 
-1. Check current connection count in PostgreSQL:
+1. Verificar conteo actual de conexiones en PostgreSQL:
    ```
    SELECT count(*) FROM pg_stat_activity;
    ```
 
-2. Check max allowed connections:
+2. Verificar máximo de conexiones permitidas:
    ```
    SHOW max_connections;
    ```
 
-3. Identify connections by state:
+3. Identificar conexiones por estado:
    ```
    SELECT state, count(*)
    FROM pg_stat_activity
    GROUP BY state;
    ```
 
-4. Find idle connections that may be leaked:
+4. Encontrar conexiones idle que pueden ser leaks:
    ```
    SELECT pid, usename, application_name, state, query_start
    FROM pg_stat_activity
@@ -42,15 +42,14 @@ status: "active"
    ORDER BY query_start;
    ```
 
-5. Check application-side pool configuration:
+5. Revisar configuración del pool de conexiones de la aplicación:
    ```
-   # Review connection pool settings in application config
-   # Typical parameters: pool_size, max_overflow, pool_timeout
+   # Revisar parámetros: pool_size, max_overflow, pool_timeout
    ```
 
-## Resolution
+## Resolución
 
-1. Terminate idle connections older than 10 minutes:
+1. Terminar conexiones idle con más de 10 minutos:
    ```
    SELECT pg_terminate_backend(pid)
    FROM pg_stat_activity
@@ -59,38 +58,38 @@ status: "active"
    AND pid <> pg_backend_pid();
    ```
 
-2. If connections are from a specific application, restart that service:
+2. Si las conexiones vienen de una aplicación específica, reiniciar ese servicio:
    ```
-   systemctl restart <application-service>
+   systemctl restart <servicio-aplicacion>
    ```
 
-3. Temporarily increase max_connections (requires superuser):
+3. Incrementar temporalmente max_connections (requiere superuser):
    ```
    ALTER SYSTEM SET max_connections = 200;
    SELECT pg_reload_conf();
    ```
-   Note: This requires PostgreSQL restart to take full effect.
+   Nota: Requiere restart de PostgreSQL para efecto completo.
 
-4. If using PgBouncer, check its pool status:
+4. Si usa PgBouncer, verificar estado del pool:
    ```
    psql -p 6432 pgbouncer -c "SHOW POOLS;"
    ```
 
-5. Verify connection count has decreased:
+5. Verificar que el conteo de conexiones disminuyó:
    ```
    SELECT count(*) FROM pg_stat_activity;
    ```
 
-## Escalation
+## Escalamiento
 
-- If connections continue to grow after cleanup, engage the application development team to identify connection leaks.
-- If max_connections needs permanent increase, coordinate with the DBA team for capacity planning.
-- If PgBouncer is misconfigured, engage the infrastructure team.
+- Si las conexiones siguen creciendo después de la limpieza, contactar al equipo de desarrollo para identificar leaks de conexiones.
+- Si max_connections necesita aumento permanente, coordinar con el equipo DBA para planificación de capacidad.
+- Si PgBouncer está mal configurado, contactar al equipo de infraestructura.
 
-## Prevention
+## Prevención
 
-- Configure application connection pools with appropriate limits (pool_size <= max_connections / app_instances).
-- Set idle connection timeout in the connection pool.
-- Monitor active connections with alerts at 80% of max_connections.
-- Implement connection health checks in the pool configuration.
-- Review connection usage patterns monthly.
+- Configurar pools de conexión con límites apropiados (pool_size <= max_connections / instancias_app).
+- Establecer timeout de conexiones idle en la configuración del pool.
+- Monitorear conexiones activas con alertas al 80% de max_connections.
+- Implementar health checks de conexiones en la configuración del pool.
+- Revisar patrones de uso de conexiones mensualmente.

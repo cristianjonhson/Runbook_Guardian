@@ -1,97 +1,97 @@
 ---
-title: "Restart Nginx Service"
+title: "Reinicio del Servicio Nginx"
 service: "nginx"
 version: "1.2.0"
 last_reviewed: "2026-07-01"
 status: "active"
 ---
 
-## Symptoms
+## Síntomas
 
-- 502 Bad Gateway errors reported by users or monitoring.
-- 503 Service Unavailable responses.
-- Connection refused on port 80 or 443.
-- Health check failures from load balancer.
-- Nginx worker processes consuming excessive memory.
+- Errores 502 Bad Gateway reportados por usuarios o monitoreo.
+- Respuestas 503 Service Unavailable.
+- Conexión rechazada en puerto 80 o 443.
+- Fallos en health checks desde el balanceador de carga.
+- Procesos worker de Nginx consumiendo memoria excesiva.
 
-## Diagnosis
+## Diagnóstico
 
-1. Check Nginx service status:
+1. Verificar el estado del servicio Nginx:
    ```
    systemctl status nginx
    ```
 
-2. Verify Nginx is listening on expected ports:
+2. Confirmar que Nginx está escuchando en los puertos esperados:
    ```
    ss -tlnp | grep nginx
    ```
 
-3. Check recent error logs:
+3. Revisar los logs de error recientes:
    ```
    tail -50 /var/log/nginx/error.log
    ```
 
-4. Verify configuration syntax:
+4. Validar la sintaxis de configuración:
    ```
    nginx -t
    ```
 
-5. Check if upstream backends are healthy:
+5. Verificar si los backends upstream están saludables:
    ```
    curl -I http://localhost:8080/health
    ```
 
-6. Check worker process count and connections:
+6. Revisar cantidad de procesos worker y conexiones:
    ```
    ps aux | grep nginx
    cat /proc/$(cat /var/run/nginx.pid)/status
    ```
 
-## Resolution
+## Resolución
 
-1. If configuration test passes, try a graceful reload first:
+1. Si el test de configuración pasa, intentar un reload graceful primero:
    ```
    systemctl reload nginx
    ```
-   This reloads configuration without dropping connections.
+   Esto recarga la configuración sin cortar conexiones activas.
 
-2. If reload does not resolve the issue, perform a full restart:
+2. Si el reload no resuelve el problema, realizar un restart completo:
    ```
    systemctl restart nginx
    ```
 
-3. Verify the service is running after restart:
+3. Verificar que el servicio está corriendo después del restart:
    ```
    systemctl status nginx
    curl -I http://localhost
    ```
 
-4. If restart fails, check for port conflicts:
+4. Si el restart falla, verificar conflictos de puerto:
    ```
    ss -tlnp | grep :80
    ss -tlnp | grep :443
    ```
 
-5. If another process holds the port, identify and stop it:
+5. Si otro proceso tiene el puerto, identificarlo y detenerlo:
    ```
    fuser -k 80/tcp
    systemctl start nginx
    ```
 
-6. Verify health from the load balancer's perspective:
+6. Verificar salud desde la perspectiva del balanceador:
    ```
    curl -I http://localhost/health
    ```
 
-## Escalation
+## Escalamiento
 
-- If Nginx repeatedly crashes after restart, escalate to the platform team.
-- If upstream backends are failing, engage the application team.
-- If SSL/TLS errors occur, check certificate expiry and engage security team.
+- Si Nginx se cae repetidamente después del restart, escalar al equipo de plataforma.
+- Si los backends upstream están fallando, contactar al equipo de aplicación.
+- Si hay errores de SSL/TLS, verificar expiración de certificados y contactar al equipo de seguridad.
 
-## Prevention
+## Prevención
 
-- Monitor Nginx error rates and response times.
-- Set alerts for worker process crashes.
-- Implement graceful restart in deployment pipelines.
-- Review and test configuration changes in staging before production.
+- Monitorear tasas de error y tiempos de respuesta de Nginx.
+- Configurar alertas para crashes de procesos worker.
+- Implementar restart graceful en los pipelines de despliegue.
+- Revisar y probar cambios de configuración en staging antes de producción.
