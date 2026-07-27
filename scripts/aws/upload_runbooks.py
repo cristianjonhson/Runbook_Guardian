@@ -31,6 +31,14 @@ def compute_sha256(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:32]
 
 
+def _to_ascii(text: str) -> str:
+    """Convierte texto a ASCII reemplazando caracteres no-ASCII."""
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKD", text)
+    return normalized.encode("ascii", "ignore").decode("ascii")
+
+
 def upload_runbook(
     s3_client,
     bucket: str,
@@ -50,10 +58,10 @@ def upload_runbook(
     s3_key = f"{s3_prefix}{file_path.name}"
     content_hash = compute_sha256(raw)
 
-    # Metadata que se almacena en S3 object headers
+    # Metadata que se almacena en S3 object headers (solo ASCII)
     s3_metadata = {
-        "runbook-title": str(metadata.get("title", ""))[:256],
-        "runbook-service": str(metadata.get("service", ""))[:128],
+        "runbook-title": _to_ascii(str(metadata.get("title", ""))[:256]),
+        "runbook-service": _to_ascii(str(metadata.get("service", ""))[:128]),
         "runbook-version": str(metadata.get("version", ""))[:32],
         "runbook-status": str(metadata.get("status", ""))[:16],
         "runbook-last-reviewed": str(metadata.get("last_reviewed", "")),
