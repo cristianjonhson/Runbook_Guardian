@@ -1,26 +1,14 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Runbook Guardian - API serverless (Lambda + API Gateway) y frontend estático (S3 + CloudFront).
+  Runbook Guardian - API cloud (Lambda + API Gateway) y frontend estático (S3 + CloudFront).
+  Lambda usa Bedrock directamente (sin sentence-transformers) para mantenerse dentro del límite de 250MB.
 
 Globals:
   Function:
     Timeout: 30
-    MemorySize: 512
+    MemorySize: 256
     Runtime: python3.11
-    Environment:
-      Variables:
-        RAG_PROVIDER: auto
-        BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
-        BEDROCK_EMBEDDING_MODEL_ID: amazon.titan-embed-text-v2:0
-        BEDROCK_MAX_TOKENS: "500"
-        BEDROCK_TEMPERATURE: "0.1"
-        BEDROCK_TIMEOUT_SECONDS: "10"
-        RUNBOOKS_PATH: /var/task/data/runbooks
-        CHROMA_PERSIST_DIR: /tmp/chroma_data
-        CHROMA_COLLECTION_NAME: runbooks
-        EMBEDDING_MODEL: all-MiniLM-L6-v2
-        LOG_LEVEL: INFO
 
 Parameters:
   ProjectName:
@@ -30,15 +18,15 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues:
-      - dev
-      - demo
 
-  # El dominio del frontend (para CORS)
-  FrontendDomain:
+  BedrockModelId:
     Type: String
-    Default: "*"
-    Description: Dominio del frontend para CORS (usar * para dev)
+    Default: us.anthropic.claude-haiku-4-5-20251001-v1:0
+
+  S3RunbooksBucket:
+    Type: String
+    Default: ""
+    Description: Bucket con runbooks (vacío = usar los empaquetados en Lambda)
 
 Resources:
   # ==========================================================================
@@ -49,16 +37,22 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${ProjectName}-query-${Environment}"
-      Handler: backend.lambda_handler.handler
+      Handler: backend/lambda_handler.handler
       CodeUri: ../../
-      Description: API backend de Runbook Guardian
+      Description: API backend de Runbook Guardian (Bedrock direct)
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_MAX_TOKENS: "500"
+          BEDROCK_TEMPERATURE: "0.1"
+          S3_RUNBOOKS_BUCKET: !Ref S3RunbooksBucket
+          RUNBOOKS_PATH: ./data/runbooks
       Policies:
         - Version: "2012-10-17"
           Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-                - bedrock:InvokeModelWithResponseStream
               Resource: "*"
             - Effect: Allow
               Action:
@@ -67,30 +61,30 @@ Resources:
               Resource:
                 - !Sub "arn:aws:s3:::${ProjectName}-source-*"
                 - !Sub "arn:aws:s3:::${ProjectName}-source-*/*"
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: "*"
       Events:
-        ApiQuery:
+        QueryPost:
           Type: Api
           Properties:
             Path: /api/v1/query
             Method: post
             RestApiId: !Ref ApiGateway
-        ApiHealth:
+        HealthGet:
           Type: Api
           Properties:
             Path: /api/v1/health
             Method: get
             RestApiId: !Ref ApiGateway
-        ApiRunbooks:
+        RunbooksGet:
           Type: Api
           Properties:
             Path: /api/v1/runbooks
             Method: get
+            RestApiId: !Ref ApiGateway
+        CorsOptions:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: options
             RestApiId: !Ref ApiGateway
       Tags:
         Project: !Ref ProjectName
@@ -103,33 +97,22 @@ Resources:
       StageName: !Ref Environment
       Cors:
         AllowMethods: "'GET,POST,OPTIONS'"
-        AllowHeaders: "'Content-Type'"
-        AllowOrigin: !Sub "'${FrontendDomain}'"
-      Tags:
-        Project: !Ref ProjectName
-        Environment: !Ref Environment
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
 
   # ==========================================================================
-  # FRONTEND: S3 + CloudFront (sitio estático)
+  # FRONTEND: S3 + CloudFront
   # ==========================================================================
 
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${ProjectName}-frontend-${AWS::AccountId}-${Environment}"
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: index.html
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
 
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
@@ -137,8 +120,7 @@ Resources:
       Bucket: !Ref FrontendBucket
       PolicyDocument:
         Statement:
-          - Sid: AllowCloudFrontAccess
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service: cloudfront.amazonaws.com
             Action: s3:GetObject
@@ -172,34 +154,21 @@ Resources:
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https
-          AllowedMethods:
-            - GET
-            - HEAD
-          CachedMethods:
-            - GET
-            - HEAD
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
           ForwardedValues:
             QueryString: false
         PriceClass: PriceClass_100
-      Tags:
-        - Key: Project
-          Value: !Ref ProjectName
-        - Key: Environment
-          Value: !Ref Environment
 
 Outputs:
   ApiUrl:
-    Description: URL de la API (API Gateway)
+    Description: URL de la API
     Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
 
   FrontendUrl:
-    Description: URL del frontend (CloudFront)
+    Description: URL del frontend
     Value: !Sub "https://${CloudFrontDistribution.DomainName}"
 
   FrontendBucketName:
-    Description: Bucket S3 del frontend
+    Description: Bucket del frontend
     Value: !Ref FrontendBucket
-
-  LambdaFunctionArn:
-    Description: ARN de la función Lambda
-    Value: !GetAtt QueryFunction.Arn
