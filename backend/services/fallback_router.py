@@ -15,7 +15,6 @@ from enum import Enum
 
 import structlog
 
-from backend.models.query import RetrievalCandidate
 from backend.services.bedrock_retriever import BedrockRunbookRetriever
 from backend.services.local_retriever import LocalRunbookRetriever
 from backend.services.retriever_protocol import RetrievalResult
