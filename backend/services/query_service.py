@@ -118,6 +118,11 @@ class QueryService:
         elif retrieval_result.error:
             mode = "error"
 
+        # Determinar si algún resultado requiere aprobación humana
+        any_approval_required = any(
+            sr.approval_required for sr in safety_results
+        )
+
         response = QueryResponse(
             query=query,
             results=results,
@@ -127,6 +132,11 @@ class QueryService:
                 response_time_ms=elapsed_ms,
                 total_candidates=total_candidates,
                 mode=mode,
+                provider_requested=self._router.provider_name,
+                provider_used=retrieval_result.provider,
+                fallback_applied=retrieval_result.fallback_applied,
+                fallback_reason=retrieval_result.fallback_reason,
+                human_approval_required=any_approval_required,
             ),
         )
 
