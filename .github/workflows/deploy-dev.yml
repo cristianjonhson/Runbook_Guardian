@@ -1,0 +1,204 @@
+name: Deploy Dev Stack (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Acción a ejecutar"
+        required: true
+        type: choice
+        options:
+          - create-change-set
+          - execute-change-set
+          - delete-stack
+          - validate-only
+      change_set_name:
+        description: "Nombre del Change Set (para execute)"
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  STACK_NAME: runbook-guardian-dev
+  TEMPLATE_FILE: infrastructure/cloudformation/templates/main.yaml
+  PARAMETERS_FILE: infrastructure/cloudformation/parameters/dev.example.json
+
+jobs:
+  validate:
+    name: Validate Templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Run cfn-lint
+        run: cfn-lint ${{ env.TEMPLATE_FILE }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate template with AWS
+        run: |
+          aws cloudformation validate-template \
+            --template-body file://${{ env.TEMPLATE_FILE }}
+
+  deploy:
+    name: ${{ github.event.inputs.action }}
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event.inputs.action != 'validate-only'
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # --- CREATE CHANGE SET ---
+      - name: Create Change Set
+        if: github.event.inputs.action == 'create-change-set'
+        run: |
+          CHANGE_SET_NAME="cs-$(date +%Y%m%d-%H%M%S)"
+          echo "CHANGE_SET_NAME=${CHANGE_SET_NAME}" >> $GITHUB_ENV
+
+          # Verificar si el stack existe
+          STACK_EXISTS=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].StackStatus" \
+            --output text 2>/dev/null || echo "NO_EXIST")
+
+          if [ "$STACK_EXISTS" = "NO_EXIST" ]; then
+            CHANGE_SET_TYPE="CREATE"
+          else
+            CHANGE_SET_TYPE="UPDATE"
+          fi
+
+          aws cloudformation create-change-set \
+            --stack-name ${{ env.STACK_NAME }} \
+            --template-body file://${{ env.TEMPLATE_FILE }} \
+            --parameters file://${{ env.PARAMETERS_FILE }} \
+            --change-set-name ${CHANGE_SET_NAME} \
+            --change-set-type ${CHANGE_SET_TYPE} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --tags \
+              Key=Project,Value=runbook-guardian \
+              Key=Environment,Value=dev \
+              Key=ManagedBy,Value=cloudformation
+
+          echo "::notice::Change Set creado: ${CHANGE_SET_NAME} (tipo: ${CHANGE_SET_TYPE})"
+
+          # Esperar y mostrar cambios
+          aws cloudformation wait change-set-create-complete \
+            --stack-name ${{ env.STACK_NAME }} \
+            --change-set-name ${CHANGE_SET_NAME} 2>/dev/null || true
+
+          echo "### Cambios propuestos:" >> $GITHUB_STEP_SUMMARY
+          aws cloudformation describe-change-set \
+            --stack-name ${{ env.STACK_NAME }} \
+            --change-set-name ${CHANGE_SET_NAME} \
+            --query "Changes[].ResourceChange.{Action:Action,LogicalId:LogicalResourceId,Type:ResourceType}" \
+            --output table >> $GITHUB_STEP_SUMMARY
+
+      # --- EXECUTE CHANGE SET ---
+      - name: Execute Change Set
+        if: github.event.inputs.action == 'execute-change-set'
+        run: |
+          CHANGE_SET_NAME="${{ github.event.inputs.change_set_name }}"
+          if [ -z "$CHANGE_SET_NAME" ]; then
+            echo "::error::Debes proporcionar el nombre del Change Set."
+            exit 1
+          fi
+
+          aws cloudformation execute-change-set \
+            --stack-name ${{ env.STACK_NAME }} \
+            --change-set-name ${CHANGE_SET_NAME}
+
+          echo "Esperando finalización del stack..."
+          aws cloudformation wait stack-create-complete \
+            --stack-name ${{ env.STACK_NAME }} 2>/dev/null || \
+          aws cloudformation wait stack-update-complete \
+            --stack-name ${{ env.STACK_NAME }} 2>/dev/null || true
+
+          # Mostrar outputs
+          echo "### Stack Outputs:" >> $GITHUB_STEP_SUMMARY
+          aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[].{Key:OutputKey,Value:OutputValue}" \
+            --output table >> $GITHUB_STEP_SUMMARY
+
+      # --- DELETE STACK ---
+      - name: Delete Stack
+        if: github.event.inputs.action == 'delete-stack'
+        run: |
+          echo "::warning::Eliminando stack ${{ env.STACK_NAME }}..."
+          echo "Recursos con DeletionPolicy=Retain NO se eliminarán."
+
+          aws cloudformation delete-stack \
+            --stack-name ${{ env.STACK_NAME }}
+
+          aws cloudformation wait stack-delete-complete \
+            --stack-name ${{ env.STACK_NAME }}
+
+          echo "::notice::Stack eliminado exitosamente."
+          echo "### Stack eliminado" >> $GITHUB_STEP_SUMMARY
+          echo "El bucket S3 con DeletionPolicy=Retain permanece." >> $GITHUB_STEP_SUMMARY
+
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.event.inputs.action == 'execute-change-set'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify stack status
+        run: |
+          STATUS=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].StackStatus" \
+            --output text)
+          echo "Stack status: ${STATUS}"
+          if [[ "$STATUS" != *"COMPLETE"* ]]; then
+            echo "::error::Stack no está en estado COMPLETE: ${STATUS}"
+            exit 1
+          fi
+
+      - name: Verify S3 bucket exists
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" \
+            --output text)
+          aws s3api head-bucket --bucket ${BUCKET}
+          echo "::notice::Bucket verificado: ${BUCKET}"
+
+      - name: Verify S3 versioning enabled
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" \
+            --output text)
+          VERSIONING=$(aws s3api get-bucket-versioning --bucket ${BUCKET} --query "Status" --output text)
+          if [ "$VERSIONING" != "Enabled" ]; then
+            echo "::error::S3 Versioning no está habilitado"
+            exit 1
+          fi
+          echo "::notice::S3 Versioning: ${VERSIONING}"
