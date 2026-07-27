@@ -57,7 +57,27 @@ class ResponseMetadata(BaseModel):
     total_candidates: int = Field(..., description="Total de candidatos evaluados.")
     mode: str = Field(
         default="normal",
-        description="Modo de operación: normal o fallback.",
+        description="Modo de operación: normal, fallback o error.",
+    )
+    provider_requested: str = Field(
+        default="local",
+        description="Proveedor RAG solicitado (local, bedrock, auto).",
+    )
+    provider_used: str = Field(
+        default="local",
+        description="Proveedor RAG realmente utilizado.",
+    )
+    fallback_applied: bool = Field(
+        default=False,
+        description="Si se activó el fallback automático.",
+    )
+    fallback_reason: str | None = Field(
+        default=None,
+        description="Motivo del fallback (BEDROCK_TIMEOUT, BEDROCK_AUTH_ERROR, etc.).",
+    )
+    human_approval_required: bool = Field(
+        default=False,
+        description="Si algún resultado requiere aprobación humana.",
     )
 
 
