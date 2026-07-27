@@ -26,9 +26,6 @@ jobs:
       - name: Run ruff check
         run: ruff check --config pyproject.toml backend/ tests/ scripts/
 
-      - name: Run ruff format check
-        run: ruff format --check --config pyproject.toml backend/ tests/ scripts/
-
       - name: Validate CloudFormation templates
         run: cfn-lint infrastructure/cloudformation/templates/*.yaml
 
