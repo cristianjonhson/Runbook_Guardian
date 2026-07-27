@@ -1,0 +1,3 @@
+# Dependencias mínimas para Lambda
+# boto3 ya está incluido en el runtime de Lambda, no necesita instalarse
+# Solo necesitamos dependencias que NO están en Lambda runtime
