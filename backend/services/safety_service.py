@@ -12,7 +12,7 @@ import re
 import structlog
 
 from backend.models.query import RetrievalCandidate
-from backend.utils.destructive_patterns import check_destructive
+from backend.utils.destructive_patterns import check_approval_required, check_destructive
 
 logger = structlog.get_logger(__name__)
 
@@ -20,9 +20,17 @@ logger = structlog.get_logger(__name__)
 class SafetyCheckResult:
     """Resultado de la verificación de seguridad de un candidato."""
 
-    def __init__(self, candidate: RetrievalCandidate, warnings: list[str]):
+    def __init__(
+        self,
+        candidate: RetrievalCandidate,
+        warnings: list[str],
+        approval_required: bool = False,
+        approval_reasons: list[str] | None = None,
+    ):
         self.candidate = candidate
         self.warnings = warnings
+        self.approval_required = approval_required
+        self.approval_reasons = approval_reasons or []
 
     @property
     def has_warnings(self) -> bool:
@@ -65,7 +73,13 @@ class SafetyService:
 
         for candidate in candidates:
             warnings = self._check_single(candidate.text)
-            results.append(SafetyCheckResult(candidate=candidate, warnings=warnings))
+            approval_reasons = check_approval_required(candidate.text)
+            results.append(SafetyCheckResult(
+                candidate=candidate,
+                warnings=warnings,
+                approval_required=len(approval_reasons) > 0,
+                approval_reasons=approval_reasons,
+            ))
             total_warnings += len(warnings)
 
         logger.info(
