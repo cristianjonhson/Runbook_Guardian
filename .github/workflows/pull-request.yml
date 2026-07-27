@@ -1,0 +1,98 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install ruff cfn-lint
+
+      - name: Run ruff check
+        run: ruff check backend/ tests/ scripts/
+
+      - name: Run ruff format check
+        run: ruff format --check backend/ tests/ scripts/
+
+      - name: Validate CloudFormation templates
+        run: cfn-lint infrastructure/cloudformation/templates/*.yaml
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov httpx
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest tests/ -v --cov=backend --cov-fail-under=70 --tb=short
+
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded secrets
+        run: |
+          # Buscar patrones de secretos en código Python
+          FOUND=$(grep -rn --include="*.py" --include="*.yaml" --include="*.yml" \
+            -E "(AWS_SECRET_ACCESS_KEY|password\s*=\s*['\"][^'\"]+['\"]|AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{48})" \
+            backend/ infrastructure/ scripts/ 2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "::error::Posibles secretos detectados en el código:"
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "No se detectaron secretos hardcodeados."
+
+      - name: Validate runbook metadata
+        run: |
+          pip install python-frontmatter
+          python scripts/aws/validate_runbooks.py
+
+  cloudformation:
+    name: CloudFormation Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Lint CloudFormation templates
+        run: cfn-lint infrastructure/cloudformation/templates/*.yaml
+
+      - name: Validate template structure
+        run: |
+          # Verificar que existen parámetros obligatorios
+          grep -q "ProjectName" infrastructure/cloudformation/templates/main.yaml
+          grep -q "Environment" infrastructure/cloudformation/templates/main.yaml
+          grep -q "DeletionPolicy" infrastructure/cloudformation/templates/main.yaml
+          echo "Template structure validated."
