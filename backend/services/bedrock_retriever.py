@@ -123,7 +123,7 @@ class BedrockRunbookRetriever:
 
         try:
             start = time.time()
-            response_text = self._invoke_model(prompt)
+            self._invoke_model(prompt)
             elapsed = time.time() - start
 
             logger.info(
