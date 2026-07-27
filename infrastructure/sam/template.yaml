@@ -37,8 +37,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "${ProjectName}-query-${Environment}"
-      Handler: backend/lambda_handler.handler
-      CodeUri: ../../
+      Handler: app.handler
+      CodeUri: lambda_code/
       Description: API backend de Runbook Guardian (Bedrock direct)
       Environment:
         Variables:
@@ -46,7 +46,7 @@ Resources:
           BEDROCK_MAX_TOKENS: "500"
           BEDROCK_TEMPERATURE: "0.1"
           S3_RUNBOOKS_BUCKET: !Ref S3RunbooksBucket
-          RUNBOOKS_PATH: ./data/runbooks
+          RUNBOOKS_PATH: runbooks
       Policies:
         - Version: "2012-10-17"
           Statement:
