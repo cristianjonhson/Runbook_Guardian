@@ -103,3 +103,4 @@ Si algo falla durante la presentación:
 1. Ejecutar `python scripts/demo_queries.py` y mostrar output en terminal.
 2. Usar `curl` contra la API directamente.
 3. Si todo falla, tener un video pregrabado.
+# test
