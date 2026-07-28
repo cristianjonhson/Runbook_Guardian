@@ -65,3 +65,4 @@ node_modules/
 
 # Kiro settings personales (mcp.json se versiona, secrets no)
 # .kiro/settings/ se versiona para compartir configuración MCP
+infrastructure/sam/.aws-sam/
