@@ -129,9 +129,9 @@ def check_destructive(text):
 
 def invoke_bedrock(query, runbooks):
     """Invoca Bedrock con los runbooks como contexto."""
-    # Construir contexto
+    # Construir contexto con TODOS los runbooks (16 * ~3KB = ~48KB, dentro del límite de 200K de Haiku)
     context_parts = []
-    for i, rb in enumerate(runbooks[:8], 1):  # Max 8 runbooks para no exceder tokens
+    for i, rb in enumerate(runbooks, 1):
         context_parts.append(f"[Runbook {i}: {rb['filename']}]\n{rb['content']}\n")
 
     context = "\n---\n".join(context_parts)
